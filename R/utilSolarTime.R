@@ -1,18 +1,51 @@
 #' @export
 computeSunPosition <- function(
   ### Calculate the position of the sun
-  timestamp          ##<< POSIXct
-  , latDeg           ##<< Latitude in (decimal) degrees
-  , longDeg          ##<< Longitude in (decimal) degrees
+  timestamp          ##<< POSIXct having a valid tzone attribute,
+  , latDeg           ##<< Latitude in (decimal) degrees (scalar)
+  , longDeg          ##<< Longitude in (decimal) degrees (scalar)
 ) {
-  doy = yday(timestamp) #as.POSIXlt(timestamp)$yday + 1  ##<<
+  if (is.null(attributes(timestamp)$tzone)) stop(
+    "Expected timestamp to have a timezone, but has none. "
+    , "Please assign the correct time zone,"
+    , " e.g. by structure(mytimestamp, tzone='UTC')"
+    , " and check that times are still correct.")
+  # express same time in different time zone for correct doy and hour
+  if(length(latDeg) != 1) {
+    warning("Expected latDeg to be a scalar value, but was length ",
+            length(longDeg), ". Using the first value.")
+    latDeg = latDeg[1]
+  }
+  if(length(longDeg) != 1) {
+    warning("Expected longDeg to be a scalar value, but was length ",
+            length(longDeg), ". Using the first value.")
+    longDeg = longDeg[1]
+  }
+  timestampLoc <- setLocalTimeZone(timestamp, longDeg)
+  doy = yday(timestampLoc) #as.POSIXlt(timestampLoc)$yday + 1  ##<<
   ## Data vector with day of year (DoY) starting at 1
   ## , same length as Hour or length 1
-  hour = getFractionalHours(timestamp)      ##<<
+  hour = getFractionalHours(timestampLoc)      ##<<
   ## Data vector with time as fractional decimal hour of local time zone
-  timeZone = getHoursAheadOfUTC(timestamp) ##<< Time zone (in hours)
+  hoursAheadOfUTC = getHoursAheadOfUTC(timestampLoc) ##<< Time zone (in hours)
   ##value<< as returned by \code{\link{computeSunPositionDoyHour}}
-  computeSunPositionDoyHour(doy, hour, latDeg, longDeg, timeZone)
+  computeSunPositionDoyHour(doy, hour, latDeg, longDeg, hoursAheadOfUTC)
+}
+
+
+#' @export
+setLocalTimeZone <- function(
+  ### modify tzone attribute of timestamp to 'GMT+x' for local to given longitude
+  timestamp          ##<< POSIXct
+  , longDeg          ##<< Longitude in (decimal) degrees
+) {
+  hourUTCDiff <- round(longDeg/15) # difference to UTC
+  signchar = if (hourUTCDiff > 0) "-" else "+" # tzone uses opposite sign
+  tzone_str = paste0("Etc/GMT", signchar, abs(hourUTCDiff))
+  ##value<< \code{timestamp} with modified tzone attribute. Its the same time
+  ## point expressed in another time zone. E.g. "2019-04-04 00:00:00 UTC"
+  ## becomes "2019-04-04 10:00:00 +10" for a longitude of +150 (Sydney, Australia)
+  structure(timestamp, tzone = tzone_str)
 }
 
 #' @export
